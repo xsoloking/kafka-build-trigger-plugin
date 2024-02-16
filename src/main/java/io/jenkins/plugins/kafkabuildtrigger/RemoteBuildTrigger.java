@@ -137,13 +137,17 @@ public class RemoteBuildTrigger <T extends Job<?, ?> & ParameterizedJobMixIn.Par
     private List<ParameterValue> getUpdatedParameters(JSONArray jsonParameters, List<ParameterValue> definedParameters) {
         List<ParameterValue> newParams = new ArrayList<ParameterValue>();
         for (ParameterValue defParam : definedParameters) {
-
+            boolean updated = false;
             for (int i = 0; i < jsonParameters.size(); i++) {
                 JSONObject jsonParam = jsonParameters.getJSONObject(i);
 
                 if (defParam.getName().toUpperCase().equals(jsonParam.getString(KEY_PARAM_NAME).toUpperCase())) {
                     newParams.add(new StringParameterValue(defParam.getName(), jsonParam.getString(KEY_PARAM_VALUE)));
+                    updated = true;
                 }
+            }
+            if (!updated) {
+                newParams.add(defParam);
             }
         }
         return newParams;
