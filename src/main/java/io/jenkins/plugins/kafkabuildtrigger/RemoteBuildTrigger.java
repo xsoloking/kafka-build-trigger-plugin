@@ -1,6 +1,5 @@
 package io.jenkins.plugins.kafkabuildtrigger;
 
-import groovy.util.logging.Slf4j;
 import hudson.Extension;
 import hudson.model.*;
 import hudson.model.listeners.ItemListener;
@@ -14,7 +13,6 @@ import org.apache.commons.lang3.StringUtils;
 import org.kohsuke.stapler.DataBoundConstructor;
 
 import java.util.*;
-import java.util.logging.Logger;
 
 /**
  * The extension trigger builds by application message.
