@@ -1,6 +1,7 @@
 package io.jenkins.plugins.kafkabuildtrigger;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import hudson.util.Secret;
 import io.confluent.kafka.serializers.KafkaJsonDeserializer;
 import net.sf.json.JSONArray;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
@@ -11,7 +12,9 @@ import org.apache.kafka.common.errors.WakeupException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.*;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.Properties;
 
 class BuildMessage {
     private String project;
@@ -46,6 +49,8 @@ class BuildMessage {
 public class KafkaConsumerHandler {
     private static final Logger LOGGER = LoggerFactory.getLogger(KafkaConsumerHandler.class);
     private String brokers;
+    private String username;
+    private String password;
     private String topicName;
     private String groupId;
     private ConsumerThread consumerThread;
@@ -58,13 +63,14 @@ public class KafkaConsumerHandler {
         return topicName;
     }
 
-    public KafkaConsumerHandler(String brokers, String topicName, String groupId) {
-        this.brokers = brokers;
-        this.topicName = topicName;
-        this.groupId = groupId;
-        if (groupId == null || groupId.isEmpty()) {
-            this.groupId = topicName+"_jenkins_consumer_"+System.currentTimeMillis();
+    public KafkaConsumerHandler(GlobalKafkaBuildTriggerConfig config) {
+        this.brokers = config.getBrokers();
+        this.topicName = config.getTopic();
+        if (config.getGroupId() != null && ! config.getGroupId().isEmpty()) {
+            this.groupId = config.getGroupId();
         }
+        this.username = config.getUsername();
+        this.password = Secret.toString(config.getPassword());
     }
 
     public boolean isConsumerThreadEnabled(){
@@ -77,7 +83,7 @@ public class KafkaConsumerHandler {
     public void enableConsumerThread() {
         if (!isConsumerThreadEnabled()) {
             LOGGER.info("Enabling consumer, broker: {}, groupId: {}", brokers, groupId);
-            consumerThread = new ConsumerThread(brokers, topicName, groupId);
+            consumerThread = new ConsumerThread(brokers, topicName, groupId, username, password);
             consumerThread.start();
         }
 
@@ -96,24 +102,30 @@ public class KafkaConsumerHandler {
         consumerThread = null;
     }
 
-    public void updateConf(String brokers, String topicName, String groupId) {
-        this.brokers = brokers;
-        this.topicName = topicName;
-        if (groupId != null && ! groupId.isEmpty()) {
-            this.groupId = groupId;
+    public void updateConf(GlobalKafkaBuildTriggerConfig config) {
+        this.brokers = config.getBrokers();
+        this.topicName = config.getTopic();
+        if (config.getGroupId() != null && ! config.getGroupId().isEmpty()) {
+            this.groupId = config.getGroupId();
         }
+        this.username = config.getUsername();
+        this.password = Secret.toString(config.getPassword());
     }
 
 
     private static class ConsumerThread extends Thread{
 
         private String broker;
+        private String username;
+        private String password;
         private String topicName;
         private String groupId;
         private KafkaConsumer<String,LinkedHashMap> kafkaConsumer;
 
-        public ConsumerThread(String broker, String topicName, String groupId){
+        public ConsumerThread(String broker, String topicName, String groupId, String username, String password) {
             this.broker = broker;
+            this.username = username;
+            this.password = password;
             this.topicName = topicName;
             this.groupId = groupId;
         }
@@ -121,6 +133,10 @@ public class KafkaConsumerHandler {
         public void run() throws WakeupException {
 
             Properties configProperties = new Properties();
+            String jaasConfig = String.format("org.apache.kafka.common.security.scram.ScramLoginModule required username=\"%s\" password=\"%s\";", username, password);
+            configProperties.setProperty("security.protocol", "SASL_PLAINTEXT");
+            configProperties.setProperty("sasl.mechanism", "SCRAM-SHA-512");
+            configProperties.setProperty("sasl.jaas.config", jaasConfig);
             configProperties.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, broker);
             configProperties.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, KafkaJsonDeserializer.class);
             configProperties.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, KafkaJsonDeserializer.class);

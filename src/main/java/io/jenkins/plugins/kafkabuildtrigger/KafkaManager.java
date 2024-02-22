@@ -1,5 +1,6 @@
 package io.jenkins.plugins.kafkabuildtrigger;
 
+import hudson.util.Secret;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -44,7 +45,6 @@ public final class KafkaManager {
                 conf.isEnableConsumer(), conf.getTopic());
         String brokers = conf.getBrokers();
         String topicName = conf.getTopic();
-        String groupId = conf.getGroupId();
         boolean enableConsumer = conf.isEnableConsumer();
 
         try {
@@ -66,7 +66,7 @@ public final class KafkaManager {
 
             if (enableConsumer) {
                 if (kafkaConnection == null) {
-                    kafkaConnection = new KafkaConsumerHandler(brokers, topicName, groupId);
+                    kafkaConnection = new KafkaConsumerHandler(conf);
                     try {
                         kafkaConnection.enableConsumerThread();
                         statusOpen = true;
@@ -75,7 +75,7 @@ public final class KafkaManager {
                         kafkaConnection = null;
                     }
                 } else {
-                    kafkaConnection.updateConf(brokers, topicName, groupId);
+                    kafkaConnection.updateConf(conf);
                     // TODO: reconnect
                 }
             }

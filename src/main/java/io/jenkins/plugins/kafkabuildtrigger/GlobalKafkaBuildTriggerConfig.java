@@ -1,6 +1,7 @@
 package io.jenkins.plugins.kafkabuildtrigger;
 
 import hudson.Extension;
+import hudson.util.Secret;
 import jenkins.model.GlobalConfiguration;
 import net.sf.json.JSONObject;
 import org.apache.commons.lang3.StringUtils;
@@ -24,17 +25,21 @@ public class GlobalKafkaBuildTriggerConfig extends GlobalConfiguration {
     private boolean enableConsumer;
     private String brokers;
     private String topic;
+    private String username;
 
+    private Secret password;
     private String groupId;
 
 
     @DataBoundConstructor
     public GlobalKafkaBuildTriggerConfig(boolean enableConsumer, String brokers,
-                                         String topic, String groupId) {
+                                         String topic, String groupId, String username, Secret password) {
         this.enableConsumer = enableConsumer;
         this.brokers = StringUtils.strip(StringUtils.stripToNull(brokers), "/");
         this.topic = topic;
         this.groupId = groupId;
+        this.username = username;
+        this.password = password;
     }
 
     /**
@@ -81,6 +86,27 @@ public class GlobalKafkaBuildTriggerConfig extends GlobalConfiguration {
     public void setBrokers(final String serviceUri) {
         this.brokers = StringUtils.strip(StringUtils.stripToNull(serviceUri), "/");
     }
+
+    public String getUsername() {
+        return username;
+    }
+
+    public void setUsername(String username) {
+        this.username = username;
+    }
+
+    public Secret getPassword() {
+        return password;
+    }
+
+    public void setPassword(String password) {
+        this.password = Secret.fromString(password);
+    }
+
+    public void setPassword(Secret password) {
+        this.password = password;
+    }
+
 
     public String getTopic() {
         return topic;
