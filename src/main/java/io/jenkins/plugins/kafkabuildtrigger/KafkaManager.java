@@ -45,6 +45,9 @@ public final class KafkaManager {
                 conf.isEnableConsumer(), conf.getTopic());
         String brokers = conf.getBrokers();
         String topicName = conf.getTopic();
+        String groupId = conf.getGroupId();
+        String username = conf.getUsername();
+        String password = Secret.toString(conf.getPassword());
         boolean enableConsumer = conf.isEnableConsumer();
 
         try {
@@ -57,26 +60,22 @@ public final class KafkaManager {
 
             if (kafkaConnection != null &&
                     !brokers.equals(kafkaConnection.getBrokers()) &&
-                    !topicName.equals(kafkaConnection.getTopicName())) {
-                if (kafkaConnection != null) {
-                    shutdownWithWait();
-                    kafkaConnection = null;
-                }
+                    !topicName.equals(kafkaConnection.getTopicName()) &&
+                    !groupId.equals(kafkaConnection.getGroupId()) &&
+                    !username.equals(kafkaConnection.getUsername()) &&
+                    !password.equals(kafkaConnection.getPassword())) {
+                shutdownWithWait();
+                kafkaConnection = null;
             }
 
-            if (enableConsumer) {
-                if (kafkaConnection == null) {
-                    kafkaConnection = new KafkaConsumerHandler(conf);
-                    try {
-                        kafkaConnection.enableConsumerThread();
-                        statusOpen = true;
-                    } catch (Exception e) {
-                        LOGGER.warn("Cannot open connection!", e);
-                        kafkaConnection = null;
-                    }
-                } else {
-                    kafkaConnection.updateConf(conf);
-                    // TODO: reconnect
+            if (enableConsumer && kafkaConnection == null) {
+                kafkaConnection = new KafkaConsumerHandler(conf);
+                try {
+                    kafkaConnection.enableConsumerThread();
+                    statusOpen = true;
+                } catch (Exception e) {
+                    LOGGER.warn("Cannot open connection!", e);
+                    kafkaConnection = null;
                 }
             }
         } catch (InterruptedException e) {

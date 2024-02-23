@@ -63,6 +63,18 @@ public class KafkaConsumerHandler {
         return topicName;
     }
 
+    public String getUsername() {
+        return username;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+
+    public String getGroupId() {
+        return groupId;
+    }
+
     public KafkaConsumerHandler(GlobalKafkaBuildTriggerConfig config) {
         this.brokers = config.getBrokers();
         this.topicName = config.getTopic();
