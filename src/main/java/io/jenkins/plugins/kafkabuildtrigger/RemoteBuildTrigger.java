@@ -11,6 +11,8 @@ import net.sf.json.JSONArray;
 import net.sf.json.JSONObject;
 import org.apache.commons.lang3.StringUtils;
 import org.kohsuke.stapler.DataBoundConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 
@@ -206,14 +208,33 @@ public class RemoteBuildTrigger <T extends Job<?, ?> & ParameterizedJobMixIn.Par
         @Extension
         public static class ItemListenerImpl extends ItemListener {
 
+            private static final Logger LOGGER = LoggerFactory.getLogger(ItemListenerImpl.class);
+            private static final int MAX_RETRY_TIMES = 3;
+            private static final int SLEEP_SECONDS = 10;
+
             @Override
             public void onLoaded() {
                 TriggerManager triggerMgr = TriggerManager.getInstance();
-                for (Project<?, ?> p : Jenkins.getInstance().getAllItems(Project.class)) {
-                    RemoteBuildTrigger t = p.getTrigger(RemoteBuildTrigger.class);
-                    if (t != null) {
-                        triggerMgr.addTrigger(t);
+                Jenkins jenkins = Jenkins.getInstanceOrNull();
+                int retryTimes = 1;
+                while (jenkins == null && retryTimes <= MAX_RETRY_TIMES) {
+                    try {
+                        Thread.sleep(SLEEP_SECONDS * retryTimes * 1000);
+                    } catch (InterruptedException e) {
+                        LOGGER.error("Thread is interrupted", e);
                     }
+                    retryTimes++;
+                    jenkins = Jenkins.getInstanceOrNull();
+                }
+                if (jenkins != null) {
+                    for (Project<?, ?> p : jenkins.getAllItems(Project.class)) {
+                        RemoteBuildTrigger t = p.getTrigger(RemoteBuildTrigger.class);
+                        if (t != null) {
+                            triggerMgr.addTrigger(t);
+                        }
+                    }
+                } else {
+                    LOGGER.error("Jenkins instance is null after retrying {} times", MAX_RETRY_TIMES);
                 }
             }
         }
