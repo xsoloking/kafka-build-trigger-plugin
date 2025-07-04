@@ -3,7 +3,10 @@ package io.jenkins.plugins.kafkabuildtrigger;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import hudson.util.Secret;
 import io.confluent.kafka.serializers.KafkaJsonDeserializer;
-import net.sf.json.JSONArray;
+import io.jenkins.plugins.kafkabuildtrigger.model.BuildMessage;
+import io.jenkins.plugins.kafkabuildtrigger.service.DefaultMessageProcessor;
+import io.jenkins.plugins.kafkabuildtrigger.service.MessageProcessor;
+import io.jenkins.plugins.kafkabuildtrigger.util.MetricsCollector;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
@@ -16,35 +19,9 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.Properties;
 
-class BuildMessage {
-    private String project;
-    private String token;
-    private JSONArray parameter;
+import static io.jenkins.plugins.kafkabuildtrigger.KafkaBuildTriggerConstants.*;
 
-    public String getToken() {
-        return token;
-    }
 
-    public void setToken(String token) {
-        this.token = token;
-    }
-
-    public String getProject() {
-        return project;
-    }
-
-    public void setProject(String project) {
-        this.project = project;
-    }
-
-    public JSONArray getParameter() {
-        return parameter;
-    }
-
-    public void setParameter(JSONArray parameter) {
-        this.parameter = parameter;
-    }
-}
 
 public class KafkaConsumerHandler {
     private static final Logger LOGGER = LoggerFactory.getLogger(KafkaConsumerHandler.class);
@@ -53,6 +30,7 @@ public class KafkaConsumerHandler {
     private String password;
     private String topicName;
     private String groupId;
+    private MessageProcessor messageProcessor;
     private ConsumerThread consumerThread;
 
     public String getBrokers(){
@@ -78,11 +56,12 @@ public class KafkaConsumerHandler {
     public KafkaConsumerHandler(GlobalKafkaBuildTriggerConfig config) {
         this.brokers = config.getBrokers();
         this.topicName = config.getTopic();
-        if (config.getGroupId() != null && ! config.getGroupId().isEmpty()) {
-            this.groupId = config.getGroupId();
-        }
+        this.groupId = (config.getGroupId() != null && !config.getGroupId().isEmpty())
+                       ? config.getGroupId()
+                       : DEFAULT_GROUP_ID;
         this.username = config.getUsername();
         this.password = Secret.toString(config.getPassword());
+        this.messageProcessor = new DefaultMessageProcessor(TriggerManager.getInstance());
     }
 
     public boolean isConsumerThreadEnabled(){
@@ -125,7 +104,7 @@ public class KafkaConsumerHandler {
     }
 
 
-    private static class ConsumerThread extends Thread{
+    private class ConsumerThread extends Thread{
 
         private String broker;
         private String username;
@@ -146,14 +125,14 @@ public class KafkaConsumerHandler {
 
             Properties configProperties = new Properties();
             String jaasConfig = String.format("org.apache.kafka.common.security.scram.ScramLoginModule required username=\"%s\" password=\"%s\";", username, password);
-            configProperties.setProperty("security.protocol", "SASL_PLAINTEXT");
+            configProperties.setProperty("security.protocol", SECURITY_PROTOCOL_SASL_PLAINTEXT);
             configProperties.setProperty("sasl.mechanism", "SCRAM-SHA-512");
             configProperties.setProperty("sasl.jaas.config", jaasConfig);
             configProperties.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, broker);
             configProperties.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, KafkaJsonDeserializer.class);
             configProperties.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, KafkaJsonDeserializer.class);
             configProperties.put(ConsumerConfig.GROUP_ID_CONFIG, groupId);
-            configProperties.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest");
+            configProperties.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, AUTO_OFFSET_RESET_LATEST);
 
             //Figure out where to start processing messages from
             kafkaConsumer = new KafkaConsumer<String, LinkedHashMap>(configProperties);
@@ -163,12 +142,18 @@ public class KafkaConsumerHandler {
             //Start processing messages
             try {
                 while (true) {
-                    ConsumerRecords<String, LinkedHashMap> records = kafkaConsumer.poll(100);
+                    ConsumerRecords<String, LinkedHashMap> records = kafkaConsumer.poll(KAFKA_POLL_TIMEOUT_MS);
                     for (ConsumerRecord<String, LinkedHashMap> record : records) {
-                        BuildMessage buildMsg = mapper.convertValue(record.value(), BuildMessage.class);
-                        handleBuildMessage(buildMsg);
+                        try {
+                            BuildMessage buildMsg = mapper.convertValue(record.value(), BuildMessage.class);
+                            messageProcessor.processMessage(buildMsg, this.topicName);
+                        } catch (Exception e) {
+                            LOGGER.error("Error processing message from topic {}: {}", this.topicName, e.getMessage(), e);
+                        }
                     }
                 }
+            } catch (WakeupException e) {
+                LOGGER.info("Consumer thread interrupted");
             } finally{
                 kafkaConsumer.close();
                 LOGGER.info("After closing KafkaConsumer");
@@ -176,25 +161,12 @@ public class KafkaConsumerHandler {
         }
 
         /**
-         * Finds matched projects using given project name and token then schedule
-         * build.
+         * Stops the consumer gracefully.
          */
-        public void handleBuildMessage(BuildMessage buildMsg) {
-
-            for (RemoteBuildTrigger t : TriggerManager.getInstance().getTriggers()) {
-
-                if (t.getRemoteBuildToken() == null) {
-                    LOGGER.warn("Ignoring kafka trigger for project {}: no token set", t.getProjectName());
-                    continue;
-                }
-
-                if (t.getProjectName().equals(buildMsg.getProject())
-                        && t.getRemoteBuildToken().equals(buildMsg.getToken())) {
-
-                    t.scheduleBuild(this.topicName, buildMsg.getParameter());
-                }
+        public void shutdown() {
+            if (kafkaConsumer != null) {
+                kafkaConsumer.wakeup();
             }
-
         }
 
         public KafkaConsumer<String, LinkedHashMap> getKafkaConsumer(){

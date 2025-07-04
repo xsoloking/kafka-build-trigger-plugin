@@ -16,6 +16,8 @@ import org.slf4j.LoggerFactory;
 
 import java.util.*;
 
+import static io.jenkins.plugins.kafkabuildtrigger.KafkaBuildTriggerConstants.*;
+
 /**
  * The extension trigger builds by application message.
  *
@@ -23,12 +25,7 @@ import java.util.*;
  */
 public class RemoteBuildTrigger <T extends Job<?, ?> & ParameterizedJobMixIn.ParameterizedJob> extends Trigger<T> {
 
-    public static final String PLUGIN_APPID = "remote-build";
 
-    private static final String PLUGIN_NAME = "Kafka Build Trigger";
-
-    private static final String KEY_PARAM_NAME = "name";
-    private static final String KEY_PARAM_VALUE = "value";
 
     private String remoteBuildToken;
 
@@ -209,8 +206,6 @@ public class RemoteBuildTrigger <T extends Job<?, ?> & ParameterizedJobMixIn.Par
         public static class ItemListenerImpl extends ItemListener {
 
             private static final Logger LOGGER = LoggerFactory.getLogger(ItemListenerImpl.class);
-            private static final int MAX_RETRY_TIMES = 3;
-            private static final int SLEEP_SECONDS = 10;
 
             @Override
             public void onLoaded() {

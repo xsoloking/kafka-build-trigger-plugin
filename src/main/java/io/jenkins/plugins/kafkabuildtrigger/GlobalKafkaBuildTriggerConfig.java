@@ -2,6 +2,8 @@ package io.jenkins.plugins.kafkabuildtrigger;
 
 import hudson.Extension;
 import hudson.util.Secret;
+import io.jenkins.plugins.kafkabuildtrigger.exception.InvalidConfigurationException;
+import io.jenkins.plugins.kafkabuildtrigger.util.ConfigurationValidator;
 import jenkins.model.GlobalConfiguration;
 import net.sf.json.JSONObject;
 import org.apache.commons.lang3.StringUtils;
@@ -10,14 +12,12 @@ import org.kohsuke.stapler.StaplerRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static io.jenkins.plugins.kafkabuildtrigger.KafkaBuildTriggerConstants.*;
+
 @Extension
 public class GlobalKafkaBuildTriggerConfig extends GlobalConfiguration {
 
-    private static final String PLUGIN_NAME = "Kafka Build Trigger";
-    /**
-     * The string in global configuration that indicates content is empty.
-     */
-    public static final String CONTENT_NONE = "-";
+
 
     @SuppressWarnings("unused")
     private static final Logger LOGGER = LoggerFactory.getLogger(GlobalKafkaBuildTriggerConfig.class);
@@ -57,6 +57,14 @@ public class GlobalKafkaBuildTriggerConfig extends GlobalConfiguration {
     @Override
     public boolean configure(StaplerRequest req, JSONObject json) throws FormException {
         req.bindJSON(this, json);
+
+        // Validate configuration before saving
+        try {
+            ConfigurationValidator.validate(this);
+        } catch (InvalidConfigurationException e) {
+            throw new FormException("Configuration validation failed: " + e.getMessage(), "configuration");
+        }
+
         save();
         return true;
     }

@@ -15,7 +15,7 @@ public class SaveableListenerImpl extends SaveableListener {
     @Override
     public final void onChange(Saveable o, XmlFile file) {
         if (o instanceof GlobalKafkaBuildTriggerConfig) {
-            LOGGER.info("RabbitMQ configuration is updated, so update connection...");
+            LOGGER.info("Kafka configuration is updated, so update connection...");
             KafkaManager.getInstance().update();
         }
         super.onChange(o, file);

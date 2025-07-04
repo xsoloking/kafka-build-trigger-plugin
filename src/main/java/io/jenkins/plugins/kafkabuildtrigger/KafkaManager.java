@@ -1,11 +1,14 @@
 package io.jenkins.plugins.kafkabuildtrigger;
 
 import hudson.util.Secret;
+import io.jenkins.plugins.kafkabuildtrigger.exception.KafkaConnectionException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+
+import static io.jenkins.plugins.kafkabuildtrigger.KafkaBuildTriggerConstants.*;
 
 public final class KafkaManager {
 
@@ -18,7 +21,7 @@ public final class KafkaManager {
         private static final KafkaManager INSTANCE = new KafkaManager();
     }
 
-    private static final long TIMEOUT_CLOSE = 300000;
+
     private static final Logger LOGGER = LoggerFactory.getLogger(KafkaManager.class);
 
     private KafkaConsumerHandler kafkaConnection;
@@ -108,7 +111,7 @@ public final class KafkaManager {
             try {
                 closeLatch = new CountDownLatch(1);
                 shutdown();
-                if (!closeLatch.await(TIMEOUT_CLOSE, TimeUnit.MILLISECONDS)) {
+                if (!closeLatch.await(TIMEOUT_CLOSE_MS, TimeUnit.MILLISECONDS)) {
                     onCloseCompleted(kafkaConnection);
                     throw new InterruptedException("Wait timeout");
                 }
@@ -135,7 +138,7 @@ public final class KafkaManager {
     public void onCloseCompleted(KafkaConsumerHandler kafkaConnection) {
         if (this.kafkaConnection != null && this.kafkaConnection.equals(kafkaConnection)) {
             this.kafkaConnection = null;
-            LOGGER.info("Closed RabbitMQ connection: {}",kafkaConnection.getBrokers());
+            LOGGER.info("Closed Kafka connection: {}",kafkaConnection.getBrokers());
             kafkaConnection.disableConsumerThread();
             kafkaConnection = null;
             //kafkaConnection.removeRMQConnectionListener(this);
